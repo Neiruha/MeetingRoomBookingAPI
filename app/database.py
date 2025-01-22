@@ -5,24 +5,17 @@ from typing import List, Dict, Optional
 import logging
 from threading import Lock
 
-# Папки для данных
+# --- Инициализация ---
 DATA_FOLDER = "./data"
 USERS_FILE = os.path.join(DATA_FOLDER, "users.json")
 ROOMS_FILE = os.path.join(DATA_FOLDER, "rooms.json")
 
-# Убедимся, что папка существует
-os.makedirs(DATA_FOLDER, exist_ok=True)
-
-# Настройка логирования
+# Логирование
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Блокировки для файлов
-file_locks = {
-    USERS_FILE: Lock(),
-    ROOMS_FILE: Lock(),
-}
-
+# Блокировки для работы с файлами
+file_locks = {}
 
 def get_file_lock(file_path: str) -> Lock:
     """Получить блокировку для файла."""
@@ -30,11 +23,14 @@ def get_file_lock(file_path: str) -> Lock:
         file_locks[file_path] = Lock()
     return file_locks[file_path]
 
-
+# --- Установка папки данных ---
 def set_data_folder(folder_path: str):
     """Установить путь для папки данных."""
-    global DATA_FOLDER
-    DATA_FOLDER = folder_path
+    global DATA_FOLDER, USERS_FILE, ROOMS_FILE
+    DATA_FOLDER = os.path.abspath(folder_path)
+    USERS_FILE = os.path.join(DATA_FOLDER, "users.json")
+    ROOMS_FILE = os.path.join(DATA_FOLDER, "rooms.json")
+    os.makedirs(DATA_FOLDER, exist_ok=True)
     logger.info(f"Data folder set to: {DATA_FOLDER}")
 
 
@@ -120,6 +116,18 @@ def read_bookings(target_date: date) -> List[Dict]:
     bookings = read_json(get_file_path(target_date))
     if not isinstance(bookings, list):  # Если файл содержит что-то кроме списка
         bookings = []
+
+    # Преобразование booked_by в объект Participant
+    users = load_users()
+    for booking in bookings:
+        if isinstance(booking["booked_by"], str):  # Если booked_by — строка (ID пользователя)
+            user_info = users.get(booking["booked_by"])
+            if user_info:
+                booking["booked_by"] = {
+                    "id": booking["booked_by"],
+                    "name": user_info["name"]
+                }
+
     return bookings
 
 
@@ -157,12 +165,12 @@ def create_booking(booking: Dict) -> Dict:
         logger.error(f"Booking with ID {booking['id']} already exists.")
         raise ValueError(f"Booking with ID {booking['id']} already exists.")
 
-    # Добавляем инициатора бронирования в базу (если не добавили заранее)
-    if isinstance(booking["booked_by"], int):  # Указан ID
-        user_id = str(booking["booked_by"])
-        if user_id not in users:
-            users[user_id] = {"name": f"User {user_id}", "nickname": ""}
-            save_users(users)
+    # Преобразуем `booked_by` в объект
+    if isinstance(booking["booked_by"], str):  # Если это ID пользователя
+        user_info = users.get(booking["booked_by"])
+        if not user_info:
+            raise ValueError(f"User with ID {booking['booked_by']} not found in the database.")
+        booking["booked_by"] = {"id": booking["booked_by"], "name": user_info["name"]}
 
     # Обработка участников
     participants, guests = process_participants(booking["participants"], users)
@@ -175,7 +183,7 @@ def create_booking(booking: Dict) -> Dict:
     # Сохраняем бронирование
     booking["participants"] = participants
     booking["guests"] = guests
-    bookings.append(booking)  # Теперь bookings точно список
+    bookings.append(booking)
     write_bookings(target_date, bookings)
 
     logger.info(f"Booking {booking['id']} created successfully.")

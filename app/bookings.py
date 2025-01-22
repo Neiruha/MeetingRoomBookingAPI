@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from datetime import date, time
-from app.schemas import BookingCreate, BookingUpdate
-from app.models import Booking, Room, Participant
+from app.schemas import BookingCreate, BookingUpdate, Room, Participant
+from app.models import Booking
 from app.database import (
     create_booking,
     get_booking,
@@ -15,16 +15,12 @@ from app.database import (
     load_users,
     save_users,
     get_bookings_in_range,
+    add_user,
 )
-import logging
-
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# === Все бронирования
+# === 1. Получение всех бронирований с фильтрацией ===
 
 @router.get("/bookings/all")
 async def get_all_bookings(
@@ -33,20 +29,16 @@ async def get_all_bookings(
     rooms: Optional[str] = Query(None, description="Комнаты через запятую, например: '501,502'")
 ):
     """
-    Получить все бронирования с фильтрацией.
+    Получить все бронирования с фильтрацией по датам и комнатам.
     """
     try:
-        bookings = get_bookings_in_range(
-            start_date, 
-            end_date, 
-            rooms.split(",") if rooms else None
-        )
+        room_ids = rooms.split(",") if rooms else None
+        bookings = get_bookings_in_range(start_date, end_date, room_ids)
         return bookings
     except Exception as e:
-        logger.exception("Ошибка в маршруте /bookings/all")
         raise HTTPException(status_code=500, detail=str(e))
 
-# === Основные маршруты для работы с бронированиями ===
+# === 2. Создание нового бронирования ===
 
 @router.post("/bookings/create", response_model=Booking)
 async def create_booking_endpoint(booking: BookingCreate):
@@ -54,7 +46,7 @@ async def create_booking_endpoint(booking: BookingCreate):
     Создать новое бронирование.
     """
     if not check_room_availability(booking.date, booking.room_id, booking.start_time, booking.end_time):
-        raise HTTPException(status_code=400, detail="Room not available for selected time")
+        raise HTTPException(status_code=400, detail="Комната недоступна в указанное время")
 
     new_booking = create_booking({
         "id": f"{booking.room_id}{booking.date.strftime('%Y%m%d')}{booking.start_time.strftime('%H%M')}",
@@ -69,46 +61,61 @@ async def create_booking_endpoint(booking: BookingCreate):
     })
     return new_booking
 
+# === 3. Получение бронирования по ID ===
 
 @router.get("/bookings/{booking_id}", response_model=Booking)
-async def get_booking_endpoint(booking_id: str, target_date: str):
+async def get_booking_endpoint(booking_id: str, target_date: date):
     """
     Получить бронирование по ID.
     """
-    booking = get_booking(date.fromisoformat(target_date), booking_id)
+    booking = get_booking(target_date, booking_id)
     if not booking:
-        raise HTTPException(status_code=404, detail="Booking not found")
+        raise HTTPException(status_code=404, detail="Бронирование не найдено")
     return booking
 
+# === 4. Добавление новой комнаты ===
 
-@router.put("/bookings/{booking_id}/update", response_model=Booking)
-async def update_booking_endpoint(
-    booking_id: str,
-    booking_update: BookingUpdate,
-    target_date: str,
-):
+@router.post("/rooms/add")
+async def add_room(room: Room):
     """
-    Обновить существующее бронирование.
+    Добавить новую комнату.
     """
-    target_date_obj = date.fromisoformat(target_date)
-    bookings = read_bookings(target_date_obj)
+    rooms = load_rooms()
+    if any(r["id"] == room.id for r in rooms):
+        raise HTTPException(status_code=400, detail="Комната уже существует")
+    rooms.append(room.dict())
+    save_rooms(rooms)
+    return {"message": f"Комната {room.id} успешно добавлена"}
 
-    booking_index = next((i for i, b in enumerate(bookings) if b["id"] == booking_id), None)
-    if booking_index is None:
-        raise HTTPException(status_code=404, detail="Booking not found")
+# === 5. Получение всех комнат ===
 
-    for key, value in booking_update.dict(exclude_unset=True).items():
-        bookings[booking_index][key] = value
-
-    write_bookings(target_date_obj, bookings)
-    return bookings[booking_index]
-
-
-@router.delete("/bookings/{booking_id}/delete")
-async def delete_booking_endpoint(booking_id: str, target_date: str):
+@router.get("/rooms/all", response_model=List[Room])
+async def get_all_rooms():
     """
-    Удалить бронирование.
+    Получить список всех комнат.
     """
-    if not delete_booking(date.fromisoformat(target_date), booking_id):
-        raise HTTPException(status_code=404, detail="Booking not found")
-    return {"message": "Booking deleted successfully"}
+    return load_rooms()
+
+# === 6. Добавление нового пользователя ===
+
+@router.post("/users/add")
+async def add_user_endpoint(user: Participant):
+    """
+    Добавить нового пользователя.
+    """
+    users = load_users()
+    if user.id in users:
+        raise HTTPException(status_code=400, detail="Пользователь уже существует")
+    users[user.id] = {"name": user.name, "nickname": user.telegram_id or ""}
+    save_users(users)
+    return {"message": f"Пользователь {user.id} успешно добавлен"}
+
+# === 7. Получение всех пользователей ===
+
+@router.get("/users/all", response_model=List[Participant])
+async def get_all_users():
+    """
+    Получить список всех пользователей.
+    """
+    users = load_users()
+    return [Participant(id=user_id, name=data["name"], telegram_id=data.get("nickname")) for user_id, data in users.items()]

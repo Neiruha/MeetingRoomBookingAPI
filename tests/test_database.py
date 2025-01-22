@@ -16,8 +16,8 @@ from app.database import (
     load_users
 )
 
-# Папка для тестов
-TEST_DATA_FOLDER = "./test_data"
+# Преобразование TEST_DATA_FOLDER в абсолютный путь
+TEST_DATA_FOLDER = os.path.abspath("./test_data")
 
 @pytest.fixture(scope="function", autouse=True)
 def setup_and_teardown():
@@ -30,26 +30,33 @@ def setup_and_teardown():
     os.rmdir(TEST_DATA_FOLDER)
 
 def test_create_booking():
+    # Добавляем пользователя в базу
+    add_user(123, "Test User")
+
     booking = {
         "id": "501202501170900",
         "room_id": "501",
         "date": "2025-01-17",
         "start_time": "09:00",
         "end_time": "10:00",
-        "booked_by": "user_123",
+        "booked_by": "123",  # ID добавленного пользователя
         "participants": ["Alice", "Bob"],
         "status": "confirmed",
         "comment": "Important meeting",
     }
+    
+    # Создаём бронирование
     result = create_booking(booking)
+    
+    # Проверяем, что бронирование создано корректно
     assert result["id"] == "501202501170900"
 
-    # Проверка записи в файл
+    # Проверяем, что данные сохранились в файле
     bookings = read_bookings(date(2025, 1, 17))
     assert len(bookings) == 1
     assert bookings[0]["id"] == "501202501170900"
 
-    # Попытка создать бронирование с таким же ID
+    # Попытка создать дубликат должна завершиться ошибкой
     with pytest.raises(ValueError):
         create_booking(booking)
 

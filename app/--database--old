@@ -1,0 +1,197 @@
+import json
+import os
+from datetime import date, datetime, time, timedelta
+from typing import List, Dict, Optional
+import logging
+from threading import Lock
+
+# --- Инициализация ---
+DATA_FOLDER = "./data"
+USERS_FILE = os.path.join(DATA_FOLDER, "users.json")
+ROOMS_FILE = os.path.join(DATA_FOLDER, "rooms.json")
+
+# Логирование
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Блокировки для работы с файлами
+file_locks = {}
+
+def get_file_lock(file_path: str) -> Lock:
+    """Получить блокировку для файла."""
+    if file_path not in file_locks:
+        file_locks[file_path] = Lock()
+    return file_locks[file_path]
+
+# --- Установка папки данных ---
+def set_data_folder(folder_path: str):
+    """Установить путь для папки данных."""
+    global DATA_FOLDER, USERS_FILE, ROOMS_FILE
+    DATA_FOLDER = os.path.abspath(folder_path)
+    USERS_FILE = os.path.join(DATA_FOLDER, "users.json")
+    ROOMS_FILE = os.path.join(DATA_FOLDER, "rooms.json")
+    os.makedirs(DATA_FOLDER, exist_ok=True)
+    logger.info(f"Data folder set to: {DATA_FOLDER}")
+
+# --- Работа с JSON ---
+def read_json(file_path: str) -> any:
+    """Чтение JSON файла с использованием блокировок."""
+    lock = get_file_lock(file_path)
+    with lock:
+        if not os.path.exists(file_path):
+            return [] if file_path.endswith(".json") else {}
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка декодирования JSON {file_path}: {e}")
+            return [] if file_path.endswith(".json") else {}
+
+def write_json(file_path: str, data: List[Dict]):
+    """Запись JSON файла с использованием блокировок."""
+    lock = get_file_lock(file_path)
+    with lock:
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Ошибка записи файла {file_path}: {e}")
+
+# --- Работа с комнатами ---
+def load_rooms() -> List[Dict]:
+    """Загрузить список переговорных."""
+    return read_json(ROOMS_FILE)
+
+def save_rooms(rooms: List[Dict]):
+    """Сохранить список переговорных."""
+    room_ids = [room['id'] for room in rooms]
+    if len(room_ids) != len(set(room_ids)):
+        raise ValueError("Duplicate room IDs found in the rooms list.")
+    write_json(ROOMS_FILE, rooms)
+
+# --- Работа с пользователями ---
+def load_users() -> Dict[str, Dict[str, str]]:
+    """Загрузить базу пользователей."""
+    users = read_json(USERS_FILE)
+    return users if isinstance(users, dict) else {}
+
+def save_users(users: Dict[str, Dict[str, str]]):
+    """Сохранить базу пользователей."""
+    write_json(USERS_FILE, users)
+
+def add_user(user_id: str, name: str, nickname: Optional[str] = None):
+    """Добавить пользователя."""
+    users = load_users()
+    if user_id in users:
+        logger.info(f"Пользователь с ID {user_id} уже существует.")
+    else:
+        users[user_id] = {"name": name, "nickname": nickname or ""}
+        save_users(users)
+        logger.info(f"Пользователь {name} добавлен в базу.")
+
+# --- Работа с бронированиями ---
+def get_file_path(target_date: date) -> str:
+    """Получить путь к файлу бронирований."""
+    return os.path.join(DATA_FOLDER, f"{target_date.strftime('%Y-%m-%d')}.json")
+
+def read_bookings(target_date: date) -> List[Dict]:
+    """Прочитать бронирования из JSON-файла."""
+    bookings = read_json(get_file_path(target_date))
+    users = load_users()
+
+    for booking in bookings:
+        if isinstance(booking["booked_by"], str):  # Преобразуем ID в объект
+            user_info = users.get(booking["booked_by"])
+            if user_info:
+                booking["booked_by"] = {
+                    "id": booking["booked_by"],
+                    "name": user_info["name"],
+                    "telegram_id": user_info.get("nickname"),
+                }
+    return bookings if isinstance(bookings, list) else []
+
+def write_bookings(target_date: date, bookings: List[Dict]):
+    """Записать бронирования в JSON-файл."""
+    write_json(get_file_path(target_date), bookings)
+
+def process_participants(participants: List[str], users: Dict) -> (List[Dict], List[str]):
+    """Обработать участников, разделив их на известных и гостей."""
+    known = []
+    guests = []
+    for participant in participants:
+        user_info = users.get(participant)
+        if user_info:
+            known.append({
+                "id": participant,
+                "name": user_info["name"],
+                "telegram_id": user_info.get("nickname"),
+            })
+        else:
+            guests.append(participant)
+    return known, guests
+
+def create_booking(booking: Dict) -> Dict:
+    """Создать новое бронирование."""
+    target_date = date.fromisoformat(booking["date"])
+    users = load_users()
+
+    bookings = read_bookings(target_date)
+    if any(b["id"] == booking["id"] for b in bookings):
+        raise ValueError(f"Бронирование с ID {booking['id']} уже существует.")
+
+    # Преобразуем `booked_by` в объект
+    booked_by = users.get(booking["booked_by"])
+    if not booked_by:
+        raise ValueError(f"Пользователь с ID {booking['booked_by']} не найден.")
+    booking["booked_by"] = {
+        "id": booking["booked_by"],
+        "name": booked_by["name"],
+        "telegram_id": booked_by.get("nickname"),
+    }
+
+    # Обрабатываем участников
+    known, guests = process_participants(booking["participants"], users)
+    if not known and not guests:
+        raise ValueError("Список участников не может быть пустым.")
+    booking["participants"] = known
+    booking["guests"] = guests
+
+    # Сохраняем
+    bookings.append(booking)
+    write_bookings(target_date, bookings)
+    return booking
+
+def check_room_availability(target_date: date, room_id: str, start_time: time, end_time: time) -> bool:
+    """Проверить доступность комнаты."""
+    bookings = read_bookings(target_date)
+    for booking in bookings:
+        if booking["room_id"] == room_id:
+            existing_start = datetime.strptime(booking["start_time"], "%H:%M").time()
+            existing_end = datetime.strptime(booking["end_time"], "%H:%M").time()
+            if start_time < existing_end and end_time > existing_start:
+                return False
+    return True
+
+def get_bookings_in_range(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    rooms: Optional[List[str]] = None
+) -> List[Dict]:
+    """Получить бронирования за диапазон дат."""
+    result = []
+    for file_name in os.listdir(DATA_FOLDER):
+        if file_name in ["rooms.json", "users.json"]:
+            continue
+        try:
+            file_date = date.fromisoformat(file_name.replace(".json", ""))
+        except ValueError:
+            continue
+        if start_date and file_date < start_date:
+            continue
+        if end_date and file_date > end_date:
+            continue
+        bookings = read_json(os.path.join(DATA_FOLDER, file_name))
+        if rooms:
+            bookings = [b for b in bookings if b["room_id"] in rooms]
+        result.extend(bookings)
+    return result
