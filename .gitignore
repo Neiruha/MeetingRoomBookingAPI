@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+.trash
+data/
+.pytest_cache
+bookings.code-workspace
+dir.py
+dump.py
+odump.py
+dump.md
+hook.py
