@@ -1,182 +1,172 @@
 # Booking Room Demo
 
-**Booking Room Demo** — это API - сервер для управления бронированиями переговорных комнат с использованием JSON-файлов для хранения данных. Проект включает функционал работы с пользователями, комнатами, участниками и автоматическое уведомление о бронированиях.
+**Booking Room Demo** is an API server for managing meeting room bookings using JSON files for storing data. The project includes functionality for working with users, rooms, participants and automatic notification of bookings.
 
 ## 📄 Warning
 
-Проект распространяется свободно с лицензией "как-есть". Это только демо, простейшая реализация. Я могу сделать Ваш проект полностью под ключ.
+The project is freely distributed with an "as-is" license. This is only a demo, the simplest implementation. I can make your project completely turnkey.
 
 FeelMusic (Neiruha)
 
-
-## 🛠 Стек технологий
+## 🛠 Tech stack
 
 - **Python** (3.10+)
-- **FastAPI** — для API
-- **Pytest** — для тестов
-- **JSON** — для хранения данных
-- **Git** — для контроля версий
+- **FastAPI** — for API
+- **Pytest** — for tests
+- **JSON** — for storing data
+- **Git** — for version control
 
 ---
 
-## 📂 Структура проекта
+## 📂 Project structure
 
 ```plaintext
-.
-├── app/
-│   ├── __init__.py          # Пустой файл для обозначения модуля
-│   ├── database.py          # Основная логика работы с бронированиями и пользователями
-│   └── main.py              # Точка входа для FastAPI
+. ├── app/
+│ ├── __init__.py # Empty file to denote the module
+│ ├── database.py # Main logic for working with bookings and users
+│ └── main.py # Entry point for FastAPI
 │
-├── data/                    # Папка для хранения данных (JSON-файлы)
-│   ├── users.json           # База данных пользователей
-│   └── YYYY-MM-DD.json      # Файлы с бронированиями по дням
+├── data/ # Folder for storing data (JSON files)
+│ ├── users.json # User database
+│ └── YYYY-MM-DD.json # Files with bookings by day
 │
-├── tests/                   # Папка для тестов
-│   ├── __init__.py          # Пустой файл для обозначения модуля
-│   └── test_database.py     # Тесты для database.py
+├── tests/ # Folder for tests
+│ ├── __init__.py # Empty file to denote the module
+│ └── test_database.py # Tests for database.py
 │
-├── generate_test_bookings.py # Скрипт для генерации тестовых бронирований
-├── requirements.txt         # Зависимости проекта
-├── .gitignore               # Исключения для Git
-├── pytest.ini               # Конфигурация для pytest
-└── README.md                # Описание проекта
+├── generate_test_bookings.py # Script for generating test bookings
+├── requirements.txt # Project dependencies
+├── .gitignore # Exceptions for Git
+├── pytest.ini # Configuration for pytest
+└── README.md # Project description
 
 ```
 
-## ⚙️ Установка и настройка
+## ⚙️ Installation and setup
 
-1. **Клонируйте репозиторий:**
+1. **Clone the repository:**
 
 ```bash
 git clone https://github.com/username/booking-system.git
 cd booking-system
 ```
-	
-2. **Установите зависимости:**
+
+2. **Install dependencies:**
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 🚀 Запуск проекта
+## 🚀 Run project
 
-
-1. **Запуск приложения (FastAPI):**
+1. **Running the application (FastAPI):**
 
 ```bash
 python app/main.py
 ```
-Приложение будет доступно по адресу: http://127.0.0.1:8000
+The application will be available at: http://127.0.0.1:8000
 
-
-2. **Генерация тестовых данных: Для создания тестовых бронирований используйте:**
+2. **Generating test data: To create test bookings, use:**
 
 ```bash
 python generate_test_bookings.py
 ```
 
-## 🧪 Тестирование
+## 🧪 Testing
 
-1. **Запуск всех тестов:**
+1. **Running all tests:**
 
 ```bash
-Редактировать
+Edit
 pytest tests/
 ```
 
-2. **Проверка конкретного теста:**
+2. **Checking a specific test:**
 
 ```bash
 pytest tests/test_database.py
 ```
 
-## 📚 Пример использования API
+## 📚 Example of API usage
 
-### Добавление бронирования
+### Adding a booking
 
-**Запрос:**  
+**Request:**
 `POST /bookings/`
 
 ```json
 
 {
-    "id": "501202501170900",
-    "room_id": "501",
-    "date": "2025-01-17",
-    "start_time": "09:00",
-    "end_time": "10:00",
-    "booked_by": 101,
-    "participants": [103, 104],
-    "status": "confirmed",
-    "comment": "Important meeting"
+"id": "501202501170900",
+ "room_id": "501",
+ "date": "2025-01-17",
+ "start_time": "09:00",
+ "end_time": "10:00",
+ "booked_by": 101,
+ "participants": [103, 104],
+ "status": "confirmed",
+ "comment": "Important meeting"
 }
 
 ```
 
-**Ответ:**
+**Answer:**
 
 ```json
 {
-    "id": "501202501170900",
-    "room_id": "501",
-    "date": "2025-01-17",
-    "start_time": "09:00",
-    "end_time": "10:00",
-    "booked_by": 101,
-    "participants": [
-        { "id": 103, "name": "Марина" },
-        { "id": 104, "name": "Ольга" }
-    ],
-    "status": "confirmed",
-    "comment": "Important meeting",
-    "guests": []
+ "id": "501202501170900",
+ "room_id": "501",
+ "date": "2025-01-17",
+ "start_time": "09:00",
+ "end_time": "10:00",
+ "booked_by": 101,
+ "participants": [
+ { "id": 103, "name": "Marina" },
+{ "id": 104, "name": "Olga" }
+],
+"status": "confirmed",
+"comment": "Important meeting",
+"guests": []
 }
-
 ```
 
----
-
-## 🗃 Формат данных
+## 🗃 Data format
 
 ### `users.json`
 
 ```json
 {
-    "101": {
-        "name": "Петр",
-        "nickname": "Петя"
-    },
-    "102": {
-        "name": "Вася",
-        "nickname": "Васька"
-    }
+"101": {
+"name": "Petr",
+"nickname": "Petya"
+},
+"102": {
+"name": "Vasya",
+"nickname": "Vaska"
+}
 }
 
 ```
 
-### Бронирование в `YYYY-MM-DD.json`
+### Booking in `YYYY-MM-DD.json`
 
 ```json
 [
-    {
-        "id": "501202501170900",
-        "room_id": "501",
-        "date": "2025-01-17",
-        "start_time": "09:00",
-        "end_time": "10:00",
-        "booked_by": 101,
-        "participants": [
-            { "id": 103, "name": "Марина" },
-            { "id": 104, "name": "Ольга" }
-        ],
-        "status": "confirmed",
-        "comment": "Important meeting",
-        "guests": []
-    }
+{
+"id": "501202501170900",
+"room_id": "501",
+"date": "2025-01-17",
+"start_time": "09:00",
+"end_time": "10:00",
+"booked_by": 101,
+"participants": [
+{ "id": 103, "name": "Marina" },
+ { "id": 104, "name": "Olga" }
+ ],
+ "status": "confirmed",
+ "comment": "Important meeting",
+ "guests": []
+ }
 ]
 
 ```
-
----
-
