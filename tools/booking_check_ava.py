@@ -3,9 +3,9 @@ from datetime import datetime, time
 
 # Настройки
 API_URL = "http://127.0.0.1:8000/api/v1"
-CHECK_DATE = datetime(2025, 1, 22).date()
-START_TIME = time(14, 0)
-END_TIME = time(15, 0)
+CHECK_DATE = datetime(2025, 2, 5).date()
+START_TIME = time(8, 0)
+END_TIME = time(18, 0)
 MIN_CAPACITY = None  # Минимальная вместимость (None, если фильтрация не нужна)
 
 def format_booking(booking):
@@ -47,7 +47,7 @@ def check_availability():
 
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:  # Если комнаты заняты
-            print("Все комнаты заняты. Смотрим текущее расписание...\n")
+            print("404. Все комнаты заняты. Смотрим текущее расписание...\n")
 
             # Запрос на бронирования
             response = requests.get(f"{API_URL}/bookings/all")

@@ -25,10 +25,11 @@ class BookingUpdate(BaseModel):
     comment: Optional[str] = None  # Комментарий
 
 class AvailabilityCheck(BaseModel):
-    date: date  # Дата проверки
-    start_time: time  # Время начала
-    end_time: time  # Время окончания
-    min_capacity: Optional[int] = None  # Минимальная вместимость
+    date: date
+    start_time: time
+    end_time: time
+    min_capacity: Optional[int] = None
+    needed_interval: Optional[int] = 60  # 👈 Теперь это часть JSON
 
 class Room(BaseModel):
     id: str  # ID комнаты

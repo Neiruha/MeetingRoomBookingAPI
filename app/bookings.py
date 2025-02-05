@@ -15,7 +15,9 @@ from app.database import (
     load_users,
     save_users,
     get_bookings_in_range,
-    add_user,
+    add_user, 
+    find_available_time_slots, 
+    is_user_booked
 )
 
 router = APIRouter()
@@ -45,9 +47,34 @@ async def create_booking_endpoint(booking: BookingCreate):
     """
     Создать новое бронирование.
     """
-    if not check_room_availability(booking.date, booking.room_id, booking.start_time, booking.end_time):
-        raise HTTPException(status_code=400, detail="Комната недоступна в указанное время")
 
+    target_date = booking.date
+    start_time = booking.start_time
+    end_time = booking.end_time
+
+    # 1️⃣ Проверяем, свободна ли комната
+    if not check_room_availability(target_date, booking.room_id, start_time, end_time):
+        available_slots = find_available_time_slots(target_date, booking.room_id)
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Комната недоступна в указанное время.",
+                "available_slots": available_slots
+            }
+        )
+
+    # 2️⃣ Проверяем, свободны ли все участники
+    for participant_id in booking.participants:
+        if is_user_booked(target_date, participant_id, start_time, end_time):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": f"Участник {participant_id} уже записан на это время.",
+                    "conflicting_participant": participant_id
+                }
+            )
+
+    # 3️⃣ Создаем бронирование
     new_booking = create_booking({
         "id": f"{booking.room_id}{booking.date.strftime('%Y%m%d')}{booking.start_time.strftime('%H%M')}",
         "room_id": booking.room_id,
@@ -59,6 +86,7 @@ async def create_booking_endpoint(booking: BookingCreate):
         "comment": booking.comment or "",
         "status": "confirmed",
     })
+    
     return new_booking
 
 # === 3. Получение бронирования по ID ===
@@ -119,3 +147,12 @@ async def get_all_users():
     """
     users = load_users()
     return [Participant(id=user_id, name=data["name"], telegram_id=data.get("nickname")) for user_id, data in users.items()]
+
+
+@router.get("/bookings/user/", response_model=List[Booking])
+async def get_user_bookings_endpoint(user_id: str, start_date: date, end_date: date):
+    """
+    Получить бронирования для конкретного пользователя.
+    """
+    bookings = get_user_bookings(user_id, start_date, end_date)
+    return bookings

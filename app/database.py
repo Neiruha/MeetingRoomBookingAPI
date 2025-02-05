@@ -289,3 +289,66 @@ def get_bookings_in_range(
         result.extend(bookings)
 
     return result
+
+
+def find_available_time_slots(target_date: date, room_id: str) -> List[Dict[str, str]]:
+    """
+    Найти возможные свободные временные интервалы для комнаты на день.
+    Возвращает список словарей с "start_time" и "end_time".
+    """
+    bookings = read_bookings(target_date)
+    
+    # Берем все брони этой комнаты
+    room_bookings = sorted(
+        [b for b in bookings if b["room_id"] == room_id],
+        key=lambda b: b["start_time"]
+    )
+    
+    # Список доступных слотов
+    available_slots = []
+    current_time = time(8, 0)  # Начало рабочего дня (можно настраивать)
+    end_of_day = time(20, 0)   # Конец рабочего дня
+
+    for booking in room_bookings:
+        existing_start = datetime.strptime(booking["start_time"], "%H:%M").time()
+        existing_end = datetime.strptime(booking["end_time"], "%H:%M").time()
+
+        # Если между текущим временем и началом брони есть окно — записываем его
+        if current_time < existing_start:
+            available_slots.append({
+                "start_time": current_time.strftime("%H:%M"),
+                "end_time": existing_start.strftime("%H:%M")
+            })
+        
+        # Обновляем текущее время на конец существующей брони
+        current_time = max(current_time, existing_end)
+
+    # Добавляем последний слот до конца дня
+    if current_time < end_of_day:
+        available_slots.append({
+            "start_time": current_time.strftime("%H:%M"),
+            "end_time": end_of_day.strftime("%H:%M")
+        })
+
+    return available_slots
+
+
+def is_user_booked(target_date: date, user_id: str, start_time: time, end_time: time) -> bool:
+    """
+    Проверяет, есть ли у пользователя бронь в заданное время.
+    """
+    bookings = read_bookings(target_date)
+
+    for booking in bookings:
+        # Проверяем всех участников брони
+        participants = [p["id"] for p in booking.get("participants", [])]
+        
+        if user_id in participants or booking.get("booked_by", {}).get("id") == user_id:
+            existing_start = datetime.strptime(booking["start_time"], "%H:%M").time()
+            existing_end = datetime.strptime(booking["end_time"], "%H:%M").time()
+
+            # Если времена пересекаются — пользователь уже занят
+            if start_time < existing_end and end_time > existing_start:
+                return True
+    
+    return False

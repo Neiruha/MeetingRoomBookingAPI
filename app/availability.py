@@ -37,32 +37,79 @@ async def check_availability_endpoint(check: AvailabilityCheck):
     return available_rooms
 
 
-@router.get("/rooms/urgent/", response_model=List[Room])
-async def get_urgent_rooms_endpoint():
-    """
-    Получение списка доступных переговорок в ближайшие 30 минут.
-    """
-    current_datetime = datetime.now()
-    target_date = current_datetime.date()
-    start_time = current_datetime.time()
-    end_time = (datetime.combine(target_date, start_time) + timedelta(minutes=30)).time()
 
-    # Загружаем комнаты из JSON
+def generate_time_slots(start: time, end: time, interval: int) -> List[tuple]:
+    """
+    Разбивает заданный временной промежуток на интервалы по interval минут.
+    """
+    slots = []
+    current = datetime.combine(date.today(), start)
+    end_dt = datetime.combine(date.today(), end)
+
+    while current + timedelta(minutes=interval) <= end_dt:
+        slots.append((current.time(), (current + timedelta(minutes=interval)).time()))
+        current += timedelta(minutes=interval)
+
+    return slots
+
+
+@router.post("/plan/")
+async def plan_availability_endpoint(check: AvailabilityCheck):
+    """
+    Возвращает список доступных временных слотов в переговорных, деля день на интервалы.
+    """
+    target_date = check.date
+    start_time = check.start_time
+    end_time = check.end_time
+    needed_interval = check.needed_interval  # Теперь это часть JSON!
+
+    # Загружаем комнаты
     all_rooms = [Room(**room) for room in load_rooms()]
 
-    # Проверяем доступность каждой комнаты
-    available_rooms = [
-        room for room in all_rooms
-        if check_room_availability(target_date, room.id, start_time, end_time)
-    ]
+    # Получаем список всех возможных слотов в рамках рабочего дня
+    all_slots = generate_time_slots(start_time, end_time, needed_interval)
 
-    return available_rooms
+    # Отфильтруем только свободные слоты для каждой комнаты
+    plan = []
 
+    for room in all_rooms:
+        busy_slots = []
 
-@router.get("/bookings/user/", response_model=List[Booking])
-async def get_user_bookings_endpoint(user_id: str, start_date: date, end_date: date):
-    """
-    Получить бронирования для конкретного пользователя.
-    """
-    bookings = get_user_bookings(user_id, start_date, end_date)
-    return bookings
+        # Проверяем, какие слоты уже заняты
+        for slot_start, slot_end in all_slots:
+            if not check_room_availability(target_date, room.id, slot_start, slot_end):
+                busy_slots.append((slot_start, slot_end))
+
+        # Оставшиеся слоты считаем свободными
+        free_slots = [slot for slot in all_slots if slot not in busy_slots]
+
+        # Если нет свободных мест, ищем соседние доступные интервалы
+        if not free_slots:
+            shifted_slots = []
+            search_direction = [-1, 1]  # Сначала назад, потом вперед
+            for direction in search_direction:
+                shift = 1
+                while shift <= 3:  # Проверим три ближайших интервала в обе стороны
+                    shifted_start = (datetime.combine(date.today(), start_time) + timedelta(minutes=needed_interval * direction * shift)).time()
+                    shifted_end = (datetime.combine(date.today(), end_time) + timedelta(minutes=needed_interval * direction * shift)).time()
+                    
+                    if check_room_availability(target_date, room.id, shifted_start, shifted_end):
+                        shifted_slots.append((shifted_start, shifted_end))
+                        break  # Нашли ближайший слот — дальше не идем
+                    shift += 1
+
+            if shifted_slots:
+                plan.append({
+                    "room_id": room.id,
+                    "room_name": room.name,
+                    "alternative_slots": shifted_slots
+                })
+
+        else:
+            plan.append({
+                "room_id": room.id,
+                "room_name": room.name,
+                "available_slots": free_slots
+            })
+
+    return plan
